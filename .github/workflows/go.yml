@@ -1,41 +1,59 @@
-name: Go Release
+name: Go CI
 
-on:
-  release:
-    types: [published]
+on: [push, pull_request]
 
 jobs:
-  build-and-release:
+  build:
+    name: Build and Test
     runs-on: ubuntu-latest
     strategy:
       matrix:
-        go-version: ['1.23']
-        os: [linux, windows, darwin]
-        arch: [amd64, arm64] 
+        go-version: ["1.23"]
     steps:
-      - uses: actions/checkout@v4
-
-      - name: Set up Go
+      - name: Set up Go ${{ matrix.go-version }}
         uses: actions/setup-go@v4
         with:
           go-version: ${{ matrix.go-version }}
 
-      - name: Build
-        run: |
-          GOOS=$(echo ${{ matrix.os }} | sed 's/-latest//') \
-          GOARCH=${{ matrix.arch }} \
-          OUTPUT_NAME=myapp-${{ matrix.os }}-${{ matrix.arch }}
-          if [ "${GOOS}" = "windows" ]; then
-            OUTPUT_NAME="${OUTPUT_NAME}.exe"
-          fi
-          GOOS=${GOOS} GOARCH=${GOARCH} go build -v -o "output/${OUTPUT_NAME}" ./...
+      - name: Check out code
+        uses: actions/checkout@v3
 
-      - name: Upload Release Asset
-        uses: actions/upload-release-asset@v1
-        env:
-          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+      - name: Build cache
+        uses: actions/cache@v3
         with:
-          upload_url: ${{ github.event.release.upload_url }}
-          asset_path: output/*
-          asset_name: myapp-${{ matrix.os }}-${{ matrix.arch }}
-          asset_content_type: application/octet-stream
+          path: ~/go/pkg/mod
+          key: ${{ runner.os }}-go-${{ matrix.go-version }}-${{ hashFiles('**/go.sum') }}
+          restore-keys: |
+            ${{ runner.os }}-go-
+
+      - name: Format code
+        run: go fmt ./...
+
+      - name: Update dependencies
+        run: |
+          go get -u
+          go mod tidy -v
+
+      - name: Build for Linux
+        run: go build -o ./IHazMemes
+
+      - name: Build for Windows
+        run: GOOS=windows GOARCH=amd64 CGO_ENABLED=0 go build -o ./IHazMemes.exe
+
+      - name: Run tests
+        run: go test -v -race ./...
+
+      - name: Lint code
+        run: |
+          go install github.com/golangci/golangci-lint/cmd/golangci-lint@latest
+          golangci-lint run ./...
+          go mod tidy
+
+      - name: Tag a new release (manual step)
+        if: github.event_name == 'workflow_dispatch'
+        run: |
+          if [ -z "${{ github.event.inputs.tag }}" ]; then
+            echo "TAG is not set"; exit 1;
+          fi
+          git tag -a "${{ github.event.inputs.tag }}" -m "${{ github.event.inputs.tag }}"
+          git push origin "${{ github.event.inputs.tag }}"
