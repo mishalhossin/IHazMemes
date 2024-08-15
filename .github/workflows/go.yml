@@ -1,0 +1,41 @@
+name: Go Release
+
+on:
+  release:
+    types: [published]
+
+jobs:
+  build-and-release:
+    runs-on: ubuntu-latest
+    strategy:
+      matrix:
+        go-version: ['1.23']
+        os: [linux, windows, darwin]
+        arch: [amd64, arm64] 
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Set up Go
+        uses: actions/setup-go@v4
+        with:
+          go-version: ${{ matrix.go-version }}
+
+      - name: Build
+        run: |
+          GOOS=$(echo ${{ matrix.os }} | sed 's/-latest//') \
+          GOARCH=${{ matrix.arch }} \
+          OUTPUT_NAME=myapp-${{ matrix.os }}-${{ matrix.arch }}
+          if [ "${GOOS}" = "windows" ]; then
+            OUTPUT_NAME="${OUTPUT_NAME}.exe"
+          fi
+          GOOS=${GOOS} GOARCH=${GOARCH} go build -v -o "output/${OUTPUT_NAME}" ./...
+
+      - name: Upload Release Asset
+        uses: actions/upload-release-asset@v1
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        with:
+          upload_url: ${{ github.event.release.upload_url }}
+          asset_path: output/*
+          asset_name: myapp-${{ matrix.os }}-${{ matrix.arch }}
+          asset_content_type: application/octet-stream
