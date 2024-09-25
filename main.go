@@ -9,6 +9,7 @@ import (
 	"os"
 	"os/exec"
 	"path/filepath"
+	"time"
 
 	"golang.org/x/image/webp"
 )
@@ -120,6 +121,22 @@ func runAIRenamer() {
 	}
 }
 
+func updateScriptModifiedTime() error {
+	scriptPath, err := os.Executable()
+	if err != nil {
+		return fmt.Errorf("error getting script path: %v", err)
+	}
+
+	currentTime := time.Now()
+	err = os.Chtimes(scriptPath, currentTime, currentTime)
+	if err != nil {
+		return fmt.Errorf("error updating script modified time: %v", err)
+	}
+
+	fmt.Printf("Updated script modified time: %s\n", currentTime)
+	return nil
+}
+
 func main() {
 	currentDir, err := os.Getwd()
 	if err != nil {
@@ -187,4 +204,10 @@ func main() {
 	}
 
 	runAIRenamer()
+
+	// Update the script binary's modified time after execution
+	err = updateScriptModifiedTime()
+	if err != nil {
+		fmt.Printf("Error updating script modified time: %v\n", err)
+	}
 }
